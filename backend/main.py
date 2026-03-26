@@ -80,7 +80,7 @@ _LOCAL_PATH    = 'experiments/miss_v4_refined/checkpoints/best.pth'
 _FALLBACK_PATH = 'best.pth'
 
 if _ENV_PATH and os.path.exists(_ENV_PATH):
-    CHECKPOINT_PATH = _ENV_PATH
+    CHECKPOINT_PATH = "best.pth"
 elif os.path.exists(_LOCAL_PATH):
     CHECKPOINT_PATH = _LOCAL_PATH
 elif os.path.exists(_FALLBACK_PATH):
