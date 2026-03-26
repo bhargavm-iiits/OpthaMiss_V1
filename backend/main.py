@@ -11,6 +11,7 @@ import numpy as np
 from datetime import datetime
 from PIL import Image
 import io
+from model import model
 
 # ── Memory optimization for Render free tier ──
 os.environ['OMP_NUM_THREADS']        = '1'
