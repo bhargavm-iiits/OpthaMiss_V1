@@ -12,6 +12,19 @@ from datetime import datetime
 from PIL import Image
 import io
 
+# ── Memory optimization for Render free tier ──
+os.environ['OMP_NUM_THREADS']        = '1'
+os.environ['MKL_NUM_THREADS']        = '1'
+os.environ['OPENBLAS_NUM_THREADS']   = '1'
+os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+
+import torch
+import torch.nn as nn
+from torchvision import transforms
+
+# Force CPU only
+torch.set_num_threads(1)
+torch.set_num_interop_threads(1)
 import torch
 import torch.nn as nn
 from torchvision import transforms
@@ -170,52 +183,66 @@ DEVICE = None
 def load_model():
     global MODEL, DEVICE
 
-    DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    DEVICE = torch.device('cpu')  # Force CPU on Render
     print(f"[INFO] Using device: {DEVICE}")
 
-    # ── Build model architecture ──
     try:
         import timm
-        raw     = timm.create_model('vit_small_patch16_224', pretrained=False, num_classes=0)
+
+        # ── Use smaller model to save memory ──
+        raw     = timm.create_model(
+            'vit_small_patch16_224',
+            pretrained  = False,
+            num_classes = 0,
+        )
         encoder = TimmWrapper(raw, 384)
         print("[OK] ViT-S/16 architecture built")
+
     except ImportError:
-        print("[ERROR] timm not installed — run: pip install timm")
+        print("[ERROR] timm not installed")
         sys.exit(1)
 
     head  = MultiLabelHead(384, NUM_CLASSES, hidden=512, drop=0.3)
     model = FullModel(encoder, head)
 
-    # ── Load checkpoint ──
     if os.path.exists(CHECKPOINT_PATH):
         file_size = os.path.getsize(CHECKPOINT_PATH)
         size_mb   = file_size / 1024 / 1024
-        print(f"[INFO] Checkpoint found — size: {size_mb:.2f} MB")
+        print(f"[INFO] Checkpoint size: {size_mb:.2f} MB")
 
         try:
-            ckpt  = torch.load(CHECKPOINT_PATH, map_location=DEVICE, weights_only=False)
+            # Load to CPU explicitly
+            ckpt  = torch.load(
+                CHECKPOINT_PATH,
+                map_location = 'cpu',
+                weights_only = False,
+            )
             state = ckpt.get('model_state_dict', ckpt)
-            missing, unexpected = model.load_state_dict(state, strict=False)
-
-            if missing:
-                print(f"[INFO] Missing keys  : {len(missing)}")
-            if unexpected:
-                print(f"[INFO] Unexpected keys: {len(unexpected)}")
-
-            print(f"[OK] Checkpoint loaded successfully from {CHECKPOINT_PATH}")
+            model.load_state_dict(state, strict=False)
+            print(f"[OK] Checkpoint loaded")
+            del ckpt, state  # free memory immediately
 
         except Exception as e:
-            print(f"[WARNING] Could not load checkpoint: {e}")
-            print("[WARNING] Falling back to random weights — predictions will not be accurate")
-
+            print(f"[WARNING] Checkpoint load failed: {e}")
+            print("[WARNING] Using random weights")
     else:
-        print(f"[WARNING] Checkpoint not found at: {CHECKPOINT_PATH}")
-        print("[WARNING] Using random weights — predictions will not be accurate")
-        print("[TIP] Set MODEL_CHECKPOINT environment variable to your .pth file path")
+        print(f"[WARNING] No checkpoint at: {CHECKPOINT_PATH}")
+        print("[WARNING] Using random weights")
 
+    # Put model in eval mode and optimize memory
     MODEL = model.to(DEVICE).eval()
-    print("[OK] Model is ready and serving")
 
+    # Disable gradients globally to save memory
+    for param in MODEL.parameters():
+        param.requires_grad = False
+
+    print("[OK] Model ready")
+
+
+@app.on_event("startup")
+async def startup_event():
+    load_model()
+    
 # ==============================================================================
 # Prediction Logic
 # ==============================================================================
@@ -231,25 +258,18 @@ def run_predict(pil_image: Image.Image):
     ])
 
     img    = pil_image.convert('RGB')
-    tensor = transform(img)
-
-    # ── Test-time augmentation (3 passes) ──
-    tta_transforms = [
-        lambda x: x,                        # original
-        lambda x: torch.flip(x, [2]),       # horizontal flip
-        lambda x: torch.flip(x, [1]),       # vertical flip
-    ]
+    tensor = transform(img).unsqueeze(0).to(DEVICE)
 
     MODEL.eval()
-    probs_list = []
-
     with torch.no_grad():
-        for t_fn in tta_transforms:
-            inp    = t_fn(tensor).unsqueeze(0).to(DEVICE)
-            logits = MODEL(inp)
-            probs_list.append(torch.sigmoid(logits).cpu().numpy()[0])
+        # Single pass only on Render (saves memory — no TTA)
+        logits = MODEL(tensor)
+        probs  = torch.sigmoid(logits).cpu().numpy()[0]
 
-    probs = np.mean(probs_list, axis=0)
+    # Free memory immediately
+    del tensor, logits
+    torch.cuda.empty_cache() if torch.cuda.is_available() else None
+
     preds = (probs >= DEFAULT_THRESHOLDS).astype(int)
     return probs, preds
 
