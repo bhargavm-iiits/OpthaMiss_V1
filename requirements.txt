@@ -3,7 +3,7 @@ uvicorn
 python-multipart
 pillow
 numpy
-torch
-torchvision
+torch==2.2.2
+torchvision==0.17.2
 timm
 opencv-python
