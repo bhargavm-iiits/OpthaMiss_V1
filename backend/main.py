@@ -65,9 +65,8 @@ DEFAULT_THRESHOLDS = np.array([
 
 CHECKPOINT_PATH = os.environ.get(
     'MODEL_CHECKPOINT',
-    r'C:\Users\Bhargav M\Downloads\OpthaMiss-main\experiments\miss_v4_refined\checkpoints\best.pth'
+    'experiments/miss_v4_refined/checkpoints/best.pth'
 )
-
 # ==============================================================================
 # Glare Removal
 # ==============================================================================
