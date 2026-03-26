@@ -7,11 +7,10 @@ Render + Local compatible version
 import os
 import sys
 import warnings
+import io
 import numpy as np
 from datetime import datetime
 from PIL import Image
-import io
-from model import model
 
 # ── Memory optimization for Render free tier ──
 os.environ['OMP_NUM_THREADS']        = '1'
@@ -22,18 +21,15 @@ os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 import torch
 import torch.nn as nn
 from torchvision import transforms
-
-# Force CPU only
-torch.set_num_threads(1)
-torch.set_num_interop_threads(1)
-import torch
-import torch.nn as nn
-from torchvision import transforms
-
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+# ── Set number of threads for CPU ──
+torch.set_num_threads(1)
+torch.set_num_interop_threads(1)
+
+# ── Check for OpenCV (optional for glare removal) ──
 try:
     import cv2
     HAS_CV2 = True
@@ -79,9 +75,6 @@ DEFAULT_THRESHOLDS = np.array([
 ])
 
 # ── Checkpoint path resolution ──
-# Priority 1: Environment variable  (set this on Render dashboard)
-# Priority 2: Local experiments folder
-# Priority 3: Same folder as main.py
 _ENV_PATH      = os.environ.get('MODEL_CHECKPOINT', '')
 _LOCAL_PATH    = 'experiments/miss_v4_refined/checkpoints/best.pth'
 _FALLBACK_PATH = 'best.pth'
@@ -102,11 +95,13 @@ print(f"[INFO] Checkpoint path: {CHECKPOINT_PATH}")
 # ==============================================================================
 
 def remove_glare(pil_image, threshold=240, inpaint_radius=3):
+    """Remove glare spots from an image using OpenCV inpainting."""
     if not HAS_CV2:
         return pil_image
 
     img_np = np.array(pil_image)
 
+    # Convert to BGR for OpenCV
     if img_np.ndim == 2:
         img_np = cv2.cvtColor(img_np, cv2.COLOR_GRAY2BGR)
     elif img_np.shape[2] == 4:
@@ -132,6 +127,7 @@ def remove_glare(pil_image, threshold=240, inpaint_radius=3):
 # ==============================================================================
 
 class TimmWrapper(nn.Module):
+    """Wrapper to extract features from a timm vision transformer."""
     def __init__(self, model, dim):
         super().__init__()
         self.model     = model
@@ -139,10 +135,13 @@ class TimmWrapper(nn.Module):
 
     def forward(self, x, return_all=False):
         f = self.model.forward_features(x)
+        # If the model returns a tensor of shape (batch, seq_len, embed_dim),
+        # we return it as is for return_all=True, else take the CLS token.
         return f if return_all else (f[:, 0] if f.dim() == 3 else f)
 
 
 class MultiLabelHead(nn.Module):
+    """Multi-label classification head that concatenates CLS and GAP tokens."""
     def __init__(self, embed_dim, n_classes=NUM_CLASSES, hidden=512, drop=0.3):
         super().__init__()
         self.head = nn.Sequential(
@@ -163,6 +162,7 @@ class MultiLabelHead(nn.Module):
 
 
 class FullModel(nn.Module):
+    """Complete model: encoder + classification head."""
     def __init__(self, encoder, head):
         super().__init__()
         self.encoder = encoder
@@ -170,6 +170,7 @@ class FullModel(nn.Module):
 
     def forward(self, x):
         tokens = self.encoder(x, return_all=True)
+        # In case the encoder returns a 2D tensor (e.g., after pooling), duplicate it
         if tokens.dim() == 2:
             return self.head.head(torch.cat([tokens, tokens], dim=1))
         return self.head(tokens)
@@ -182,6 +183,7 @@ MODEL  = None
 DEVICE = None
 
 def load_model():
+    """Load the model and its checkpoint."""
     global MODEL, DEVICE
 
     DEVICE = torch.device('cpu')  # Force CPU on Render
@@ -239,16 +241,12 @@ def load_model():
 
     print("[OK] Model ready")
 
-
-@app.on_event("startup")
-async def startup_event():
-    load_model()
-    
 # ==============================================================================
 # Prediction Logic
 # ==============================================================================
 
 def run_predict(pil_image: Image.Image):
+    """Run inference on a PIL image and return probabilities and binary predictions."""
     transform = transforms.Compose([
         transforms.Resize(
             (224, 224),
@@ -263,11 +261,10 @@ def run_predict(pil_image: Image.Image):
 
     MODEL.eval()
     with torch.no_grad():
-        # Single pass only on Render (saves memory — no TTA)
         logits = MODEL(tensor)
         probs  = torch.sigmoid(logits).cpu().numpy()[0]
 
-    # Free memory immediately
+    # Free memory
     del tensor, logits
     torch.cuda.empty_cache() if torch.cuda.is_available() else None
 
@@ -311,7 +308,6 @@ def root():
         "endpoint": "/predict  (POST — multipart/form-data, field: file)",
     }
 
-
 @app.get("/health")
 def health():
     return {
@@ -323,10 +319,9 @@ def health():
         "checkpoint"  : CHECKPOINT_PATH,
     }
 
-
 @app.post("/predict")
 async def predict_endpoint(file: UploadFile = File(...)):
-
+    """Predict diseases from an uploaded eye image."""
     # ── Validate file type ──
     if not file.content_type.startswith("image/"):
         raise HTTPException(
@@ -416,7 +411,6 @@ async def predict_endpoint(file: UploadFile = File(...)):
         "auc_score"   : 0.982,
         "disclaimer"  : "AI-assisted screening only. Must be confirmed by a qualified ophthalmologist.",
     })
-
 
 # ==============================================================================
 # Run locally
