@@ -54,17 +54,17 @@ const FeatureCard = ({ feature, index }) => {
   return (
     <div
       ref={ref}
-      className="border border-neutral-800/50 rounded-lg p-6 text-center hover:border-neutral-700 hover:bg-neutral-900/30 transition-all duration-500 group cursor-default"
+      className="border border-neutral-800/50 rounded-lg p-6 text-center hover:border-neutral-700 hover:bg-neutral-900/30 transition-all duration-300 group"
       style={{
         opacity: visible ? 1 : 0,
         transform: visible ? 'translateY(0) scale(1)' : 'translateY(30px) scale(0.95)',
         transition: `all 0.6s ease-out ${index * 0.1}s`,
       }}
     >
-      <h3 className="text-neutral-200 font-medium mb-2 text-sm group-hover:text-neutral-100 transition-colors">{feature.title}</h3>
-      <p className="text-neutral-500 text-xs leading-relaxed">{feature.desc}</p>
+      <h3 className="text-neutral-200 font-medium mb-2 text-base group-hover:text-neutral-100 transition-colors">{feature.title}</h3>
+      <p className="text-neutral-500 text-sm leading-relaxed">{feature.desc}</p>
     </div>
   );
 };
 
-export default Features;  
+export default Features;

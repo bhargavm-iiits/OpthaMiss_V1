@@ -5,6 +5,18 @@ export default defineConfig({
   plugins: [react()],
   base: './',
   build: {
-    outDir: 'dist'   // ✅ FORCE output folder
-  }
+    outDir: 'dist'
+  },
+  server: {
+    proxy: {
+      '/predict': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+      '/health': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+    },
+  },
 })
