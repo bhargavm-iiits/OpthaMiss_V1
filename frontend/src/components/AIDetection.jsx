@@ -2,7 +2,23 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
 import axios from 'axios';
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
+const API_BASE_URL = (import.meta.env.VITE_API_URL || '').trim().replace(/\/$/, '');
+const API_DISPLAY_URL = API_BASE_URL || window.location.origin;
+
+const buildApiUrl = (endpoint) => `${API_BASE_URL}${endpoint}`;
+
+const diagnoseNetworkError = async (endpoint) => {
+  try {
+    await axios.get(buildApiUrl('/health'), { timeout: 10000 });
+    return `Backend is reachable at ${API_DISPLAY_URL}, but the upload request to ${endpoint} failed before the server returned a response. This is usually a browser, CORS, proxy, or HTTPS issue rather than the API being down.`;
+  } catch {
+    if (API_BASE_URL) {
+      return `Cannot connect to backend at ${API_DISPLAY_URL}. The configured API URL may be unavailable, sleeping, or blocked from this browser.`;
+    }
+
+    return 'Cannot connect to the backend through the local dev proxy. Make sure the frontend dev server is running and proxying requests to http://localhost:8000.';
+  }
+};
 
 const useReveal = () => {
   const ref = useRef(null);
@@ -277,7 +293,7 @@ const AIDetection = () => {
     const formData = new FormData();
     formData.append('file', state.image);
 
-    const url = `${API_BASE_URL}${config.endpoint}`;
+    const url = buildApiUrl(config.endpoint);
 
     try {
       const response = await axios.post(url, formData, {
@@ -288,7 +304,7 @@ const AIDetection = () => {
     } catch (err) {
       let errorMsg;
       if (err.code === 'ERR_NETWORK' || err.message === 'Network Error') {
-        errorMsg = `Cannot connect to backend at ${API_BASE_URL}. Make sure the backend is running on port 8000.`;
+        errorMsg = await diagnoseNetworkError(config.endpoint);
       } else if (err.code === 'ECONNABORTED') {
         errorMsg = 'Request timed out. The model may be loading — try again in a few seconds.';
       } else if (err.response?.status === 500) {
