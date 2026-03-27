@@ -2,6 +2,8 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
 import axios from 'axios';
 
+const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
+
 const useReveal = () => {
   const ref = useRef(null);
   const [visible, setVisible] = useState(false);
@@ -101,7 +103,7 @@ const AIDetection = () => {
     formData.append('file', image);
 
     try {
-      const response = await axios.post('http://localhost:8000/predict', formData, {
+      const response = await axios.post(`${API_BASE_URL}/predict`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       setResult(response.data);
@@ -109,7 +111,7 @@ const AIDetection = () => {
     } catch (err) {
       setError(
         err.response?.data?.detail ||
-        'Failed to connect to backend. Ensure server is running on port 8000.'
+        'Failed to connect to backend. Check your VITE_API_URL and backend deployment.'
       );
     } finally {
       setLoading(false);
