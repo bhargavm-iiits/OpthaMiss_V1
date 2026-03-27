@@ -12,11 +12,13 @@ import numpy as np
 from datetime import datetime
 from PIL import Image
 
-# ── Memory optimization for Render free tier ──
-os.environ['OMP_NUM_THREADS']        = '1'
-os.environ['MKL_NUM_THREADS']        = '1'
-os.environ['OPENBLAS_NUM_THREADS']   = '1'
-os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+# ── Memory & thread optimization for Render free tier ──
+os.environ['OMP_NUM_THREADS']               = '1'
+os.environ['MKL_NUM_THREADS']               = '1'
+os.environ['OPENBLAS_NUM_THREADS']          = '1'
+os.environ['TOKENIZERS_PARALLELISM']        = 'false'
+os.environ['TORCH_NUM_THREADS']             = '1'   # intra‑op threads
+os.environ['TORCH_NUM_INTEROP_THREADS']     = '1'   # inter‑op threads
 
 import torch
 import torch.nn as nn
@@ -24,10 +26,6 @@ from torchvision import transforms
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-
-# ── Set number of threads for CPU ──
-torch.set_num_threads(1)
-torch.set_num_interop_threads(1)
 
 # ── Check for OpenCV (optional for glare removal) ──
 try:
@@ -74,13 +72,16 @@ DEFAULT_THRESHOLDS = np.array([
     0.670, 0.780, 0.907, 0.630, 0.638, 0.722,
 ])
 
-# ── Checkpoint path resolution ──
+# ── Checkpoint path resolution (absolute path from your system) ──
+_ABSOLUTE_PATH = r"C:\Users\Bhargav M\Downloads\OpthaMiss-main\experiments\miss_v4_refined\checkpoints\best.pth"
 _ENV_PATH      = os.environ.get('MODEL_CHECKPOINT', '')
 _LOCAL_PATH    = 'experiments/miss_v4_refined/checkpoints/best.pth'
 _FALLBACK_PATH = 'best.pth'
 
 if _ENV_PATH and os.path.exists(_ENV_PATH):
     CHECKPOINT_PATH = _ENV_PATH
+elif os.path.exists(_ABSOLUTE_PATH):
+    CHECKPOINT_PATH = _ABSOLUTE_PATH
 elif os.path.exists(_LOCAL_PATH):
     CHECKPOINT_PATH = _LOCAL_PATH
 elif os.path.exists(_FALLBACK_PATH):
@@ -123,7 +124,7 @@ def remove_glare(pil_image, threshold=240, inpaint_radius=3):
     return pil_image
 
 # ==============================================================================
-# Model Architecture
+# Model Architecture (same as in the Gradio reference)
 # ==============================================================================
 
 class TimmWrapper(nn.Module):
@@ -135,8 +136,6 @@ class TimmWrapper(nn.Module):
 
     def forward(self, x, return_all=False):
         f = self.model.forward_features(x)
-        # If the model returns a tensor of shape (batch, seq_len, embed_dim),
-        # we return it as is for return_all=True, else take the CLS token.
         return f if return_all else (f[:, 0] if f.dim() == 3 else f)
 
 
@@ -170,7 +169,6 @@ class FullModel(nn.Module):
 
     def forward(self, x):
         tokens = self.encoder(x, return_all=True)
-        # In case the encoder returns a 2D tensor (e.g., after pooling), duplicate it
         if tokens.dim() == 2:
             return self.head.head(torch.cat([tokens, tokens], dim=1))
         return self.head(tokens)
@@ -192,7 +190,7 @@ def load_model():
     try:
         import timm
 
-        # ── Use smaller model to save memory ──
+        # Use ViT-S/16 (small model to save memory)
         raw     = timm.create_model(
             'vit_small_patch16_224',
             pretrained  = False,
@@ -214,7 +212,7 @@ def load_model():
         print(f"[INFO] Checkpoint size: {size_mb:.2f} MB")
 
         try:
-            # Load to CPU explicitly
+            # Load to CPU explicitly (weights_only=False for compatibility)
             ckpt  = torch.load(
                 CHECKPOINT_PATH,
                 map_location = 'cpu',
@@ -242,11 +240,15 @@ def load_model():
     print("[OK] Model ready")
 
 # ==============================================================================
-# Prediction Logic
+# Prediction Logic (with Test‑Time Augmentation)
 # ==============================================================================
 
 def run_predict(pil_image: Image.Image):
-    """Run inference on a PIL image and return probabilities and binary predictions."""
+    """
+    Run inference on a PIL image.
+    Returns: (probabilities array, binary predictions array)
+    Uses test‑time augmentation (3 flips) to improve robustness.
+    """
     transform = transforms.Compose([
         transforms.Resize(
             (224, 224),
@@ -257,18 +259,35 @@ def run_predict(pil_image: Image.Image):
     ])
 
     img    = pil_image.convert('RGB')
-    tensor = transform(img).unsqueeze(0).to(DEVICE)
+    tensor = transform(img)                     # shape: [C, H, W]
+
+    # TTA: original, horizontal flip, vertical flip
+    tta_transforms = [
+        lambda x: x,                                 # original
+        lambda x: torch.flip(x, dims=[2]),           # horizontal flip (width)
+        lambda x: torch.flip(x, dims=[1]),           # vertical flip (height)
+    ]
 
     MODEL.eval()
+    probs_list = []
     with torch.no_grad():
-        logits = MODEL(tensor)
-        probs  = torch.sigmoid(logits).cpu().numpy()[0]
+        for t_fn in tta_transforms:
+            # Apply transform, add batch dimension, move to device
+            input_tensor = t_fn(tensor).unsqueeze(0).to(DEVICE)
+            logits = MODEL(input_tensor)
+            probs  = torch.sigmoid(logits).cpu().numpy()[0]
+            probs_list.append(probs)
 
-    # Free memory
-    del tensor, logits
+    # Average probabilities across augmentations
+    probs = np.mean(probs_list, axis=0)
+
+    # Apply thresholds to get binary predictions
+    preds = (probs >= DEFAULT_THRESHOLDS).astype(int)
+
+    # Free memory (optional, helps on low‑memory systems)
+    del tensor, probs_list
     torch.cuda.empty_cache() if torch.cuda.is_available() else None
 
-    preds = (probs >= DEFAULT_THRESHOLDS).astype(int)
     return probs, preds
 
 # ==============================================================================
@@ -322,37 +341,37 @@ def health():
 @app.post("/predict")
 async def predict_endpoint(file: UploadFile = File(...)):
     """Predict diseases from an uploaded eye image."""
-    # ── Validate file type ──
+    # Validate file type
     if not file.content_type.startswith("image/"):
         raise HTTPException(
             status_code = 400,
             detail      = f"File must be an image. Received: {file.content_type}",
         )
 
-    # ── Load image ──
+    # Load image
     try:
         contents = await file.read()
         pil_img  = Image.open(io.BytesIO(contents)).convert("RGB")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Cannot open image: {e}")
 
-    # ── Glare removal ──
+    # Glare removal
     try:
         pil_img = remove_glare(pil_img)
     except Exception as e:
         print(f"[WARNING] Glare removal failed: {e} — using original image")
 
-    # ── Check model is loaded ──
+    # Check model is loaded
     if MODEL is None:
         raise HTTPException(status_code=503, detail="Model not loaded yet. Try again shortly.")
 
-    # ── Run inference ──
+    # Run inference
     try:
         probs, preds = run_predict(pil_img)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Inference error: {e}")
 
-    # ── Build detected conditions list ──
+    # Build detected conditions list
     detected = []
     for i, cls in enumerate(LESION_CLASSES):
         if preds[i]:
@@ -365,7 +384,7 @@ async def predict_endpoint(file: UploadFile = File(...)):
             })
     detected.sort(key=lambda x: x["probability"], reverse=True)
 
-    # ── Determine overall risk level ──
+    # Determine overall risk level
     urgencies = [d["urgency"] for d in detected]
 
     if "HIGH" in urgencies:
@@ -385,7 +404,7 @@ async def predict_endpoint(file: UploadFile = File(...)):
         risk_icon    = "green"
         risk_action  = "No significant findings — routine screening in 12 months"
 
-    # ── Build all-conditions results sorted by probability ──
+    # Build all-conditions results sorted by probability
     sorted_idx  = np.argsort(probs)[::-1]
     all_results = []
     for i in sorted_idx:
