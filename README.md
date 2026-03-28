@@ -13,6 +13,10 @@ The current backend supports two screening pipelines:
 
 This is a screening tool, not a diagnostic device. All predictions must be confirmed by a qualified ophthalmologist.
 
+## Live Demo
+
+- Vercel: https://optha-miss-v1-vkr7-ac3aha987-bhargavm-iiits-projects.vercel.app/
+
 ## Features
 
 - Dual-model screening flow for anterior and fundus images
