@@ -258,6 +258,12 @@ The `Train/` directory contains training-related utilities and experiments, incl
 - `fundus_train.py`
 - extra backend/frontend snapshots
 
+### Dataset Links
+
+- ODIR-5K: https://www.kaggle.com/datasets/andrewmvd/ocular-disease-recognition-odir5k
+- RFMiD: https://www.kaggle.com/datasets/ozlemhakdagli/retinal-fundus-multi-disease-image-dataset-rfmid
+- SLID: https://github.com/xumingyu-hub/SLID
+
 This folder appears to be a research/training workspace rather than the main runtime application. For day-to-day app development, use:
 
 - `frontend/`
