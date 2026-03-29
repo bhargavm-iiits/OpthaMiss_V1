@@ -658,6 +658,10 @@ def build_fundus_response(probs, preds):
 # FastAPI App
 # ==============================================================================
 
+# ==============================================================================
+# FastAPI App
+# ==============================================================================
+
 app = FastAPI(
     title="OpthaMiss Multi-Model API",
     description="AI-powered eye disease screening — anterior (13 classes) + fundus (8 classes)",
@@ -672,6 +676,10 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["*"],
 )
+
+# ── Mount auth router ──
+from auth import router as auth_router
+app.include_router(auth_router)
 
 
 @app.on_event("startup")
