@@ -161,7 +161,7 @@ const Sidebar = ({ user, onLogout }) => {
         <div className="px-4 py-4 flex-shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
           <div className="flex items-center gap-3">
             {user.picture ? (
-              <img src={user.picture} alt="avatar"
+              <img src={user.picture} alt="avatar" loading="lazy" decoding="async"
                 className="w-9 h-9 rounded-full object-cover flex-shrink-0"
                 style={{ border: '1px solid var(--border)' }} />
             ) : (
@@ -329,7 +329,7 @@ const TopNav = ({ user, onLogout }) => {
             style={{ color: 'var(--text-h)' }}
           >
             {user && user.picture ? (
-              <img src={user.picture} alt="avatar"
+              <img src={user.picture} alt="avatar" loading="lazy" decoding="async"
                 className="w-8 h-8 rounded-full object-cover"
                 style={{ border: '1px solid var(--border)' }} />
             ) : (
@@ -422,7 +422,7 @@ const WelcomeBanner = ({ user }) => {
           {/* Heading */}
           <div className="flex items-center gap-3 mb-2">
             {user && user.picture ? (
-              <img src={user.picture} alt="avatar"
+              <img src={user.picture} alt="avatar" loading="lazy" decoding="async"
                 className="w-12 h-12 rounded-xl object-cover"
                 style={{ border: '1px solid var(--border)' }} />
             ) : (
@@ -504,7 +504,7 @@ const WelcomeBanner = ({ user }) => {
       <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           {user && user.picture ? (
-            <img src={user.picture} alt="avatar"
+            <img src={user.picture} alt="avatar" loading="lazy" decoding="async"
               className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
               style={{ border: '1px solid var(--border)' }} />
           ) : (

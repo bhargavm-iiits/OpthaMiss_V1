@@ -481,7 +481,7 @@ export var Avatar = function ({ src, name, size }) {
   var sz = size === 'sm' ? 'w-7 h-7 text-xs' : size === 'lg' ? 'w-12 h-12 text-lg' : size === 'xl' ? 'w-16 h-16 text-2xl' : 'w-9 h-9 text-sm';
   var initial = name ? name.charAt(0).toUpperCase() : 'U';
   return src ? (
-    <img src={src} alt={name || 'avatar'}
+    <img src={src} alt={name || 'avatar'} loading="lazy" decoding="async"
       className={[sz, 'rounded-full object-cover border border-n-700 flex-shrink-0'].join(' ')} />
   ) : (
     <div className={[sz, 'rounded-full bg-n-750 border border-n-700 flex items-center justify-center font-semibold text-n-100 flex-shrink-0'].join(' ')}>

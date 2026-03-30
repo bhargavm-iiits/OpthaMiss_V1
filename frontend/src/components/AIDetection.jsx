@@ -543,6 +543,8 @@ var AIDetection = function () {
                   <img
                     src={preview}
                     alt="Preview"
+                    loading="lazy"
+                    decoding="async"
                     style={{
                       maxHeight: '260px',
                       width: '100%',

@@ -136,7 +136,7 @@ const Profile = () => {
                   border-2 border-neutral-700/50 flex items-center justify-center
                   overflow-hidden shadow-2xl">
                   {avatarPreview ? (
-                    <img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover" />
+                    <img src={avatarPreview} alt="Avatar" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                   ) : (
                     <span className="text-3xl md:text-4xl font-bold text-neutral-300">
                       {displayInitial}

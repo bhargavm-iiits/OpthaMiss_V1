@@ -151,7 +151,7 @@ var CompleteProfile = function () {
           {/* Header — uses real user.name */}
           <div className="text-center mb-8">
             {user && user.picture ? (
-              <img src={user.picture} alt="avatar"
+              <img src={user.picture} alt="avatar" loading="lazy" decoding="async"
                 className="w-16 h-16 rounded-full mx-auto mb-3 border-2 object-cover"
                 style={{ borderColor: 'var(--border)' }} />
             ) : (
