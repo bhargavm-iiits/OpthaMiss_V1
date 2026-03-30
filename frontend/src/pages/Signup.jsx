@@ -14,7 +14,6 @@ var Signup = function () {
     email: '',
     password: '',
     confirmPassword: '',
-    phone: '',
     agreeToTerms: false,
   });
   var [loading, setLoading] = useState(false);
@@ -98,7 +97,6 @@ var Signup = function () {
 
   var strength = getPasswordStrength();
 
-  /* ── Shared input style ── */
   var inputStyle = function (field) {
     var hasError = !!errors[field];
     return {
@@ -150,7 +148,7 @@ var Signup = function () {
       fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
     }}>
 
-      {/* ── Background glows ── */}
+      {/* Background glows */}
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
         <div style={{
           position: 'absolute', top: '15%', left: '20%',
@@ -166,7 +164,7 @@ var Signup = function () {
         }} />
       </div>
 
-      {/* ── Back to home ── */}
+      {/* Back to home */}
       <Link to="/" style={{
         position: 'absolute',
         top: '20px',
@@ -188,7 +186,7 @@ var Signup = function () {
         Home
       </Link>
 
-      {/* ── Card ── */}
+      {/* Card */}
       <div style={{
         position: 'relative',
         zIndex: 1,
@@ -238,7 +236,7 @@ var Signup = function () {
           </p>
         </div>
 
-        {/* ── Progress Steps ── */}
+        {/* Progress Steps */}
         <div style={{ marginBottom: '28px' }}>
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: '10px' }}>
             {[1, 2, 3].map(function (step) {
@@ -246,7 +244,6 @@ var Signup = function () {
               var isActive = step === currentStep;
               return (
                 <div key={step} style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
-                  {/* Circle */}
                   <div style={{
                     width: '32px',
                     height: '32px',
@@ -274,7 +271,6 @@ var Signup = function () {
                       </svg>
                     ) : step}
                   </div>
-                  {/* Connector */}
                   {step < totalSteps && (
                     <div style={{
                       flex: 1,
@@ -305,7 +301,7 @@ var Signup = function () {
           </div>
         </div>
 
-        {/* ── General error ── */}
+        {/* General error */}
         {errors.general && (
           <div style={{
             padding: '10px 14px',
@@ -328,10 +324,10 @@ var Signup = function () {
           </div>
         )}
 
-        {/* ── Form ── */}
+        {/* Form */}
         <form onSubmit={handleSubmit} noValidate>
 
-          {/* ── STEP 1 — Account Info ── */}
+          {/* STEP 1 — Account Info */}
           {currentStep === 1 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
@@ -391,29 +387,10 @@ var Signup = function () {
                 )}
               </div>
 
-              <div>
-                <label style={labelStyle}>
-                  Phone{' '}
-                  <span style={{ color: '#404040', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
-                    (optional)
-                  </span>
-                </label>
-                <input
-                  type="tel"
-                  name="phone"
-                  autoComplete="tel"
-                  value={formData.phone}
-                  onChange={handleChange}
-                  placeholder="+1 234 567 8900"
-                  style={inputStyle('phone')}
-                  onFocus={function (e) { e.target.style.borderColor = '#404040'; }}
-                  onBlur={function (e) { e.target.style.borderColor = 'rgba(255,255,255,0.08)'; }}
-                />
-              </div>
             </div>
           )}
 
-          {/* ── STEP 2 — Password ── */}
+          {/* STEP 2 — Password */}
           {currentStep === 2 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
@@ -501,7 +478,6 @@ var Signup = function () {
                   </p>
                 )}
 
-                {/* Match indicator */}
                 {formData.confirmPassword.length > 0 && !errors.confirmPassword && (
                   <p style={{
                     fontSize: '12px', color: '#86efac',
@@ -543,7 +519,7 @@ var Signup = function () {
             </div>
           )}
 
-          {/* ── STEP 3 — Confirm ── */}
+          {/* STEP 3 — Confirm */}
           {currentStep === 3 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
@@ -563,16 +539,15 @@ var Signup = function () {
                 {[
                   { label: 'Name', value: formData.fullName },
                   { label: 'Email', value: formData.email },
-                  { label: 'Phone', value: formData.phone || '—' },
                 ].map(function (item, i) {
                   return (
                     <div key={i} style={{
                       display: 'flex',
                       alignItems: 'flex-start',
                       gap: '10px',
-                      paddingBottom: i < 2 ? '8px' : '0',
-                      marginBottom: i < 2 ? '8px' : '0',
-                      borderBottom: i < 2 ? '1px solid #1f1f1f' : 'none',
+                      paddingBottom: i < 1 ? '8px' : '0',
+                      marginBottom: i < 1 ? '8px' : '0',
+                      borderBottom: i < 1 ? '1px solid #1f1f1f' : 'none',
                     }}>
                       <span style={{ fontSize: '12px', color: '#404040', width: '40px', flexShrink: 0 }}>
                         {item.label}
@@ -704,7 +679,7 @@ var Signup = function () {
             </div>
           )}
 
-          {/* ── Navigation buttons ── */}
+          {/* Navigation buttons */}
           <div style={{ display: 'flex', gap: '10px', marginTop: '24px' }}>
 
             {currentStep > 1 && (
@@ -820,7 +795,7 @@ var Signup = function () {
           </div>
         </form>
 
-        {/* ── Sign in link ── */}
+        {/* Sign in link */}
         <div style={{ marginTop: '24px', textAlign: 'center' }}>
           <p style={{ fontSize: '13px', color: '#525252' }}>
             Already have an account?{' '}
@@ -835,7 +810,7 @@ var Signup = function () {
           </p>
         </div>
 
-        {/* ── Footer note ── */}
+        {/* Footer note */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
