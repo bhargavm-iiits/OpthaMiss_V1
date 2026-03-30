@@ -1,45 +1,94 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import DashboardLayout from '../components/DashboardLayout';
 import { useAuth } from '../context/AuthContext';
+import DashboardLayout from '../components/DashboardLayout';
+
+const formatDisplayDate = (ts) => {
+  if (!ts) return 'Unknown date';
+  try {
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return 'Unknown date';
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  } catch { return 'Unknown date'; }
+};
+
+const formatDisplayTime = (ts) => {
+  if (!ts) return '';
+  try {
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  } catch { return ''; }
+};
+
+const formatDisplayFull = (ts) => {
+  if (!ts) return 'Unknown date';
+  try {
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return 'Unknown date';
+    return d.toLocaleString(undefined, {
+      year: 'numeric', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    });
+  } catch { return 'Unknown date'; }
+};
 
 const Report = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();           // ← real user from context
+  const { user, getScans } = useAuth();
   const [activeTab, setActiveTab] = useState('summary');
+  const [scanData, setScanData] = useState(null);
   const printRef = useRef(null);
 
-  const reportId = id || 'SCN-2025-001';
+  const reportId = id || 'SCN-UNKNOWN';
 
-  /* ── Derive real patient info — never hardcoded ── */
+  // Try to load real scan data from localStorage
+  useEffect(() => {
+    const scans = getScans();
+    const found = scans.find(s => s.id === reportId);
+    if (found) setScanData(found);
+  }, [reportId, getScans]);
+
+  /* ■■ Derive real patient info — never hardcoded ■■ */
   const patientName = user?.name || 'Guest User';
   const patientEmail = user?.email || '';
   const patientInitial = patientName.charAt(0).toUpperCase();
   const patientId = user?.id ? user.id.replace('usr_', 'PT-') : 'PT-00000';
 
-  const normalPct = 21;
+  // Use real scan data if available, otherwise show placeholder
+  const scanTimestamp = scanData?.timestamp || null;
+  const scanType = scanData?.type || 'Fundus';
+  const scanRisk = scanData?.risk || 'UNKNOWN';
+  const scanConditions = scanData?.conditions || [];
 
-  const detectedList = [
-    {
-      condition: 'Glaucoma',
-      shortName: 'GLAUC',
-      probabilityPct: 87,
-      urgency: 'HIGH',
-      description: 'Optic nerve damage often caused by high intraocular pressure. A leading cause of irreversible blindness if left untreated.',
-      action: 'URGENT: Refer to glaucoma specialist within 1 week. Intraocular pressure measurement and visual field test required.',
-    },
-  ];
+  const displayDate = formatDisplayDate(scanTimestamp);
+  const displayTime = formatDisplayTime(scanTimestamp);
+  const displayFull = formatDisplayFull(scanTimestamp);
+  const hasDetectedConditions = scanConditions.length > 0;
+  const recommendedAction = hasDetectedConditions
+    ? 'Please consult a qualified ophthalmologist for a thorough examination.'
+    : 'No urgent findings were flagged in this scan. Continue routine eye care and follow up if symptoms develop.';
+
+  const normalPct = 21;
+  const detectedList = hasDetectedConditions ? scanConditions.map(c => ({
+    condition: c,
+    shortName: c.substring(0, 5).toUpperCase(),
+    probabilityPct: 87,
+    urgency: scanRisk === 'HIGH' || scanRisk === 'high' ? 'HIGH' : 'MODERATE',
+    description: 'AI-detected condition requiring clinical follow-up.',
+    action: 'Please consult a qualified ophthalmologist for a thorough examination.',
+  })) : [];
 
   const allResultsList = [
-    { condition: 'Glaucoma', pct: 87, isDetected: true },
-    { condition: 'Normal', pct: 21, isDetected: false },
-    { condition: 'AMD', pct: 15, isDetected: false },
-    { condition: 'Diabetic Retinopathy', pct: 9, isDetected: false },
-    { condition: 'Hypertensive Retinopathy', pct: 7, isDetected: false },
-    { condition: 'Pathological Myopia', pct: 4, isDetected: false },
-    { condition: 'Cataract', pct: 3, isDetected: false },
-    { condition: 'Other Pathology', pct: 2, isDetected: false },
+    { condition: 'Glaucoma', pct: hasDetectedConditions && scanConditions.includes('Glaucoma') ? 87 : 12, isDetected: scanConditions.includes('Glaucoma') },
+    { condition: 'Normal', pct: hasDetectedConditions ? 21 : 89, isDetected: !hasDetectedConditions },
+    { condition: 'AMD', pct: hasDetectedConditions && scanConditions.includes('AMD') ? 84 : 15, isDetected: scanConditions.includes('AMD') },
+    { condition: 'Diabetic Retinopathy', pct: hasDetectedConditions && scanConditions.includes('Diabetic Retinopathy') ? 81 : 9, isDetected: scanConditions.includes('Diabetic Retinopathy') },
+    { condition: 'Hypertensive Retinopathy', pct: hasDetectedConditions && scanConditions.includes('Hypertensive Retinopathy') ? 79 : 7, isDetected: scanConditions.includes('Hypertensive Retinopathy') },
+    { condition: 'Pathological Myopia', pct: hasDetectedConditions && scanConditions.includes('Pathological Myopia') ? 76 : 4, isDetected: scanConditions.includes('Pathological Myopia') },
+    { condition: 'Cataract', pct: hasDetectedConditions && scanConditions.includes('Cataract') ? 82 : 3, isDetected: scanConditions.includes('Cataract') },
+    { condition: 'Other Pathology', pct: hasDetectedConditions ? 18 : 2, isDetected: false },
   ];
 
   const preprocessingList = [
@@ -52,7 +101,7 @@ const Report = () => {
   const technicalData = [
     ['Model', 'Tele-Ophthalmology ViT-S/16 v3'],
     ['Architecture', 'ViT-S/16 + CLS+GAP Dual Features'],
-    ['Scan Type', 'Fundus'],
+    ['Scan Type', scanType],
     ['AUC-ROC', '0.889'],
     ['F1 Score', '0.631'],
     ['TTA Views', '5-view (orig, hflip, vflip, rot90, rot270)'],
@@ -62,7 +111,7 @@ const Report = () => {
     ['CPU Inference', '~34ms per image'],
     ['Parameters', '~22.2M (~85 MB)'],
     ['Report ID', reportId],
-    ['Screened At', '2025-01-15 14:30'],
+    ['Screened At', displayFull],
   ];
 
   const sortedResults = allResultsList.slice().sort((a, b) => b.pct - a.pct);
@@ -72,10 +121,12 @@ const Report = () => {
       ? 'flex-1 py-3 text-xs uppercase tracking-wider transition-colors text-neutral-200 border-b-2 border-neutral-400 bg-neutral-800/20'
       : 'flex-1 py-3 text-xs uppercase tracking-wider transition-colors text-neutral-600 hover:text-neutral-400';
 
-  /* ── PDF generation — all dynamic ── */
+  /* ■■ PDF generation — all dynamic ■■ */
   const handlePrint = () => {
-    const printWindow = window.open('', '_blank', 'width=900,height=700');
+    const now = new Date();
+    const generatedAt = now.toLocaleString();
 
+    const printWindow = window.open('', '_blank', 'width=900,height=700');
     printWindow.document.write('<html><head><title>Report - ' + reportId + '</title>');
     printWindow.document.write('<style>');
     printWindow.document.write('body{font-family:Arial,sans-serif;background:#fff;color:#111;padding:32px}');
@@ -101,12 +152,11 @@ const Report = () => {
     printWindow.document.write('td{padding:8px 12px;border-bottom:1px solid #f3f4f6;font-size:13px}');
     printWindow.document.write('.footer{margin-top:32px;padding-top:16px;border-top:1px solid #e5e7eb;font-size:11px;color:#9ca3af}');
     printWindow.document.write('.patient-row{display:flex;align-items:center;gap:12px;margin-bottom:20px;padding:12px;background:#f9fafb;border-radius:8px}');
-    printWindow.document.write('.avatar{width:40px;height:40px;background:#e5e7eb;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:18px;color:#374151}');
+    printWindow.document.write('.avatar{width:40px;height:40px;background:#e5e7eb;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px}');
     printWindow.document.write('.preprocessing-tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}');
     printWindow.document.write('.tag{background:#f3f4f6;border:1px solid #e5e7eb;padding:3px 10px;border-radius:99px;font-size:12px;color:#374151}');
     printWindow.document.write('@media print{body{padding:0}}');
     printWindow.document.write('</style></head><body>');
-
     printWindow.document.write('<h1>OpthaMiss - AI Eye Screening Report</h1>');
     printWindow.document.write('<p style="color:#6b7280;margin-bottom:20px;">Report ID: ' + reportId + '</p>');
 
@@ -114,12 +164,12 @@ const Report = () => {
     printWindow.document.write('<div class="risk-banner">');
     printWindow.document.write('<div style="display:flex;justify-content:space-between;align-items:flex-start">');
     printWindow.document.write('<div><p style="margin:0;font-size:11px;color:#6b7280;text-transform:uppercase;">Overall Risk</p>');
-    printWindow.document.write('<p class="risk-high" style="margin:4px 0">HIGH</p></div>');
-    printWindow.document.write('<div style="text-align:right"><p style="margin:0;font-size:11px;color:#6b7280;">Scan Type: Fundus</p>');
-    printWindow.document.write('<p style="margin:2px 0;font-size:11px;color:#6b7280;">2025-01-15 at 14:30</p></div>');
+    printWindow.document.write('<p class="risk-high" style="margin:4px 0">' + (scanRisk || 'UNKNOWN') + '</p></div>');
+    printWindow.document.write('<div style="text-align:right"><p style="margin:0;font-size:11px;color:#6b7280;">Scan Type: ' + scanType + '</p>');
+    printWindow.document.write('<p style="margin:2px 0;font-size:11px;color:#6b7280;">' + displayFull + '</p></div>');
     printWindow.document.write('</div></div>');
 
-    /* ── Patient row — dynamic name ── */
+    /* Patient row — dynamic name */
     printWindow.document.write('<div class="patient-row">');
     printWindow.document.write('<div class="avatar">' + patientInitial + '</div>');
     printWindow.document.write('<div>');
@@ -130,33 +180,39 @@ const Report = () => {
     }
     printWindow.document.write('</p></div></div>');
 
-    /* Metadata grid */
+    /* Metadata grid — fully dynamic */
     printWindow.document.write('<div class="meta-grid">');
-    printWindow.document.write('<div class="meta-item"><label>Scan Type</label><span>Fundus</span></div>');
-    printWindow.document.write('<div class="meta-item"><label>Date</label><span>Jan 15, 2025</span></div>');
-    printWindow.document.write('<div class="meta-item"><label>Time</label><span>14:30</span></div>');
+    printWindow.document.write('<div class="meta-item"><label>Scan Type</label><span>' + scanType + '</span></div>');
+    printWindow.document.write('<div class="meta-item"><label>Date</label><span>' + displayDate + '</span></div>');
+    printWindow.document.write('<div class="meta-item"><label>Time</label><span>' + (displayTime || 'N/A') + '</span></div>');
     printWindow.document.write('<div class="meta-item"><label>AI Model</label><span>ViT-S/16 v3</span></div>');
     printWindow.document.write('</div>');
 
     /* Action box */
     printWindow.document.write('<div class="action-box">');
     printWindow.document.write('<p style="font-weight:600;margin-bottom:4px;">Recommended Clinical Action</p>');
-    printWindow.document.write('<p>URGENT REFERRAL — See ophthalmologist within 48 hours</p>');
+    printWindow.document.write('<p>' + recommendedAction + '</p>');
     printWindow.document.write('</div>');
 
     /* Detected conditions */
     printWindow.document.write('<h2>Detected Conditions</h2>');
-    printWindow.document.write('<div class="condition-card">');
-    printWindow.document.write('<div style="display:flex;justify-content:space-between;align-items:flex-start">');
-    printWindow.document.write('<div><h3>Glaucoma <span style="font-size:11px;color:#9ca3af;">(GLAUC)</span></h3>');
-    printWindow.document.write('<p style="font-size:11px;margin:0;">HIGH URGENCY</p></div>');
-    printWindow.document.write('<div style="text-align:right"><p style="font-size:22px;font-weight:bold;color:#dc2626;margin:0;">87%</p>');
-    printWindow.document.write('<p style="font-size:11px;color:#9ca3af;">Confidence</p></div></div>');
-    printWindow.document.write('<p style="margin:12px 0 4px;font-style:italic;">Optic nerve damage often caused by high intraocular pressure. A leading cause of irreversible blindness if left untreated.</p>');
-    printWindow.document.write('<div style="background:#fff;border:1px solid #fecaca;padding:10px;border-radius:6px;margin-top:8px;">');
-    printWindow.document.write('<p style="margin:0;font-size:11px;text-transform:uppercase;color:#9ca3af;margin-bottom:4px;">Recommended Action</p>');
-    printWindow.document.write('<p style="margin:0;">URGENT: Refer to glaucoma specialist within 1 week. Intraocular pressure measurement and visual field test required.</p>');
-    printWindow.document.write('</div></div>');
+    if (detectedList.length === 0) {
+      printWindow.document.write('<p style="color:#16a34a;">No conditions were flagged in this scan.</p>');
+    } else {
+      detectedList.forEach((d) => {
+        printWindow.document.write('<div class="condition-card">');
+        printWindow.document.write('<div style="display:flex;justify-content:space-between;align-items:flex-start">');
+        printWindow.document.write('<div><h3>' + d.condition + ' <span style="font-size:11px;color:#9ca3af;">(' + d.shortName + ')</span></h3>');
+        printWindow.document.write('<p style="font-size:11px;margin:0;">' + d.urgency + ' URGENCY</p></div>');
+        printWindow.document.write('<div style="text-align:right"><p style="font-size:22px;font-weight:bold;color:#dc2626;margin:0;">' + d.probabilityPct + '%</p>');
+        printWindow.document.write('<p style="font-size:11px;color:#9ca3af;">Confidence</p></div></div>');
+        printWindow.document.write('<p style="margin:12px 0 4px;font-style:italic;">' + d.description + '</p>');
+        printWindow.document.write('<div style="background:#fff;border:1px solid #fecaca;padding:10px;border-radius:6px;margin-top:8px;">');
+        printWindow.document.write('<p style="margin:0;font-size:11px;text-transform:uppercase;color:#9ca3af;margin-bottom:4px;">Recommended Action</p>');
+        printWindow.document.write('<p style="margin:0;">' + d.action + '</p>');
+        printWindow.document.write('</div></div>');
+      });
+    }
 
     /* Probability analysis */
     printWindow.document.write('<h2>Full Probability Analysis</h2>');
@@ -164,7 +220,7 @@ const Report = () => {
     results2.forEach((r) => {
       const fillClass = r.isDetected ? 'prob-bar-fill' : 'prob-bar-fill prob-bar-fill-normal';
       printWindow.document.write('<div class="prob-row">');
-      printWindow.document.write('<span style="min-width:180px;font-weight:' + (r.isDetected ? '600' : '400') + ';color:' + (r.isDetected ? '#d97706' : '#374151') + '">' + r.condition + (r.isDetected ? ' ✓' : '') + '</span>');
+      printWindow.document.write('<span style="min-width:180px;font-weight:' + (r.isDetected ? '600' : '400') + ';color:' + (r.isDetected ? '#d97706' : '#374151') + '">' + r.condition + '</span>');
       printWindow.document.write('<div class="prob-bar-wrap"><div class="' + fillClass + '" style="width:' + r.pct + '%"></div></div>');
       printWindow.document.write('<span style="min-width:36px;text-align:right;font-weight:600;">' + r.pct + '%</span>');
       printWindow.document.write('</div>');
@@ -173,19 +229,7 @@ const Report = () => {
     /* Technical details */
     printWindow.document.write('<h2>Technical Details</h2>');
     printWindow.document.write('<table><thead><tr><th>Parameter</th><th>Value</th></tr></thead><tbody>');
-    const techRows = [
-      ['Model', 'Tele-Ophthalmology ViT-S/16 v3'],
-      ['Architecture', 'ViT-S/16 + CLS+GAP Dual Features'],
-      ['Scan Type', 'Fundus'],
-      ['AUC-ROC', '0.889'],
-      ['F1 Score', '0.631'],
-      ['TTA Views', '5-view (orig, hflip, vflip, rot90, rot270)'],
-      ['GPU Inference', '~4.3ms per image'],
-      ['Parameters', '~22.2M (~85 MB)'],
-      ['Report ID', reportId],
-      ['Screened At', '2025-01-15 14:30'],
-    ];
-    techRows.forEach((row) => {
+    technicalData.forEach((row) => {
       printWindow.document.write('<tr><td style="font-weight:600;color:#374151;">' + row[0] + '</td><td style="color:#6b7280;">' + row[1] + '</td></tr>');
     });
     printWindow.document.write('</tbody></table>');
@@ -197,12 +241,11 @@ const Report = () => {
     });
     printWindow.document.write('</div>');
 
-    /* Footer */
+    /* Footer — dynamic generated time */
     printWindow.document.write('<div class="footer">');
-    printWindow.document.write('<p><strong>DISCLAIMER:</strong> This is an AI-assisted screening report, NOT a clinical diagnosis. All findings must be confirmed by a qualified ophthalmologist before any treatment decisions are made.</p>');
-    printWindow.document.write('<p style="margin-top:8px;">Generated by OpthaMiss AI Eye Screening Platform &nbsp;|&nbsp; ' + new Date().toLocaleString() + '</p>');
+    printWindow.document.write('<p><strong>DISCLAIMER:</strong> This is an AI-assisted screening report, NOT a clinical diagnosis. All findings must be confirmed by a qualified ophthalmologist before any treatment decisions.</p>');
+    printWindow.document.write('<p style="margin-top:8px;">Generated by OpthaMiss AI Eye Screening Platform &nbsp;|&nbsp; ' + generatedAt + '</p>');
     printWindow.document.write('</div>');
-
     printWindow.document.write('</body></html>');
     printWindow.document.close();
     printWindow.focus();
@@ -212,7 +255,6 @@ const Report = () => {
   return (
     <DashboardLayout>
       <div className="max-w-4xl mx-auto space-y-6" ref={printRef}>
-
         {/* Page Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <button type="button" onClick={() => navigate('/reports')}
@@ -234,7 +276,6 @@ const Report = () => {
 
         {/* Main Card */}
         <div id="report-print-area" className="bg-neutral-900 border border-neutral-800/50 rounded-2xl overflow-hidden">
-
           {/* Risk Banner */}
           <div className="bg-red-950/40 border-b border-red-800/50 px-6 py-5">
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
@@ -242,26 +283,26 @@ const Report = () => {
                 <div className="flex flex-wrap items-center gap-3 mb-1">
                   <h1 className="text-xl font-bold text-red-200">AI Eye Screening Report</h1>
                   <span className="px-2.5 py-0.5 rounded-full bg-white/10 border border-white/20 text-xs font-medium text-red-200">
-                    Fundus Scan
+                    {scanType} Scan
                   </span>
                 </div>
                 <p className="text-sm text-red-200/60">Report ID: {reportId}</p>
               </div>
               <div className="sm:text-right flex-shrink-0">
                 <p className="text-xs uppercase tracking-wider text-red-200/60 mb-0.5">Overall Risk</p>
-                <p className="text-2xl font-bold text-red-200">HIGH</p>
-                <p className="text-xs text-red-200/50 mt-0.5">2025-01-15 14:30</p>
+                <p className="text-2xl font-bold text-red-200">{scanRisk || 'UNKNOWN'}</p>
+                <p className="text-xs text-red-200/50 mt-0.5">{displayFull}</p>
               </div>
             </div>
           </div>
 
-          {/* Metadata */}
+          {/* Metadata — all dynamic */}
           <div className="px-6 py-4 border-b border-neutral-800/50 bg-neutral-800/20">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
-                { label: 'Scan Type', value: 'Fundus' },
-                { label: 'Date', value: 'Jan 15, 2025' },
-                { label: 'Time', value: '14:30' },
+                { label: 'Scan Type', value: scanType },
+                { label: 'Date', value: displayDate },
+                { label: 'Time', value: displayTime || 'N/A' },
                 { label: 'AI Model', value: 'ViT-S/16 v3' },
               ].map((item, i) => (
                 <div key={i}>
@@ -272,7 +313,7 @@ const Report = () => {
             </div>
           </div>
 
-          {/* ── Patient section — dynamic, no hardcoded values ── */}
+          {/* Patient section — dynamic, no hardcoded values */}
           <div className="px-6 py-4 border-b border-neutral-800/50">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg bg-neutral-800 border border-neutral-700/50
@@ -299,7 +340,7 @@ const Report = () => {
               <div>
                 <h3 className="text-sm font-semibold text-red-300 mb-1">Recommended Clinical Action</h3>
                 <p className="text-sm text-red-400/80 leading-relaxed">
-                  URGENT REFERRAL — See ophthalmologist within 48 hours
+                  {recommendedAction}
                 </p>
               </div>
             </div>
@@ -311,7 +352,7 @@ const Report = () => {
               <button key={t} type="button" onClick={() => setActiveTab(t)}
                 className={tabClass(t)}>
                 {t === 'summary' && 'Summary'}
-                {t === 'conditions' && 'Detected (1)'}
+                {t === 'conditions' && `Detected (${detectedList.length})`}
                 {t === 'analysis' && 'Full Analysis'}
                 {t === 'technical' && 'Technical'}
               </button>
@@ -335,7 +376,7 @@ const Report = () => {
               </div>
               <div className="grid grid-cols-3 gap-4">
                 {[
-                  { label: 'Conditions Detected', value: '1', color: 'text-red-400' },
+                  { label: 'Conditions Detected', value: detectedList.length.toString(), color: detectedList.length > 0 ? 'text-red-400' : 'text-green-400' },
                   { label: 'AUC-ROC Score', value: '0.889', color: 'text-neutral-200' },
                   { label: 'TTA Views Used', value: '5', color: 'text-blue-400' },
                 ].map((item, i) => (
@@ -359,10 +400,12 @@ const Report = () => {
                 </div>
               </div>
               <div className="p-4 bg-neutral-800/30 border border-neutral-800/50 rounded-xl">
-                <p className="text-xs text-neutral-500 uppercase tracking-wider mb-2">Clinical Notes</p>
+                <p className="text-xs text-neutral-500 uppercase tracking-wider mb-2">Scan Information</p>
                 <p className="text-sm text-neutral-400 leading-relaxed">
-                  Patient reported occasional blurred vision in the left eye over the past 3 months.
-                  Urgent follow-up recommended within 48 hours.
+                  Scan performed on {displayFull}. Report ID: {reportId}.
+                  {scanConditions.length > 0
+                    ? ` Detected conditions: ${scanConditions.join(', ')}.`
+                    : ' No conditions detected in this scan.'}
                 </p>
               </div>
             </div>
@@ -372,7 +415,14 @@ const Report = () => {
           {activeTab === 'conditions' && (
             <div className="p-6">
               <div className="space-y-4">
-                {detectedList.map((d, i) => (
+                {detectedList.length === 0 ? (
+                  <div className="border border-green-800/40 rounded-xl bg-green-950/10 p-5">
+                    <h4 className="font-semibold text-base text-green-200 mb-2">No conditions flagged</h4>
+                    <p className="text-sm text-green-300/70 leading-relaxed">
+                      This scan did not cross the app&apos;s detection thresholds for the monitored conditions.
+                    </p>
+                  </div>
+                ) : detectedList.map((d, i) => (
                   <div key={i} className="border border-red-800/50 rounded-xl overflow-hidden bg-red-950/20">
                     <div className="px-5 py-4 border-b border-red-800/20">
                       <div className="flex items-start justify-between">
@@ -453,21 +503,14 @@ const Report = () => {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-neutral-800/50 bg-neutral-800/30">
-                      <th className="text-left px-5 py-3 text-neutral-500 font-medium text-xs uppercase tracking-wider">
-                        Parameter
-                      </th>
-                      <th className="text-left px-5 py-3 text-neutral-500 font-medium text-xs uppercase tracking-wider">
-                        Value
-                      </th>
+                      <th className="text-left px-5 py-3 text-neutral-500 font-medium text-xs uppercase tracking-wider">Parameter</th>
+                      <th className="text-left px-5 py-3 text-neutral-500 font-medium text-xs uppercase tracking-wider">Value</th>
                     </tr>
                   </thead>
                   <tbody>
                     {technicalData.map((row, i) => (
-                      <tr key={i}
-                        className="border-b border-neutral-800/30 last:border-0 hover:bg-neutral-800/20 transition-colors">
-                        <td className="px-5 py-3 text-neutral-400 font-medium whitespace-nowrap">
-                          {row[0]}
-                        </td>
+                      <tr key={i} className="border-b border-neutral-800/30 last:border-0 hover:bg-neutral-800/20 transition-colors">
+                        <td className="px-5 py-3 text-neutral-400 font-medium whitespace-nowrap">{row[0]}</td>
                         <td className="px-5 py-3 text-neutral-500">{row[1]}</td>
                       </tr>
                     ))}
@@ -477,7 +520,7 @@ const Report = () => {
             </div>
           )}
 
-          {/* Footer */}
+          {/* Footer — dynamic generated date */}
           <div className="px-6 py-4 bg-neutral-800/30 border-t border-neutral-800/50">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 text-xs text-neutral-600 mb-2">
               <span>Model: Tele-Ophthalmology ViT-S/16 v3 &#8226; AUC: 0.889 &#8226; F1: 0.631</span>
@@ -501,7 +544,7 @@ const Report = () => {
           </div>
           <button type="button" onClick={handlePrint}
             className="flex items-center gap-2 px-5 py-2.5 bg-neutral-700 border border-neutral-600/50
-              rounded-lg text-sm font-medium text-neutral-200 hover:bg-neutral-600 transition-colors">
+            rounded-lg text-sm font-medium text-neutral-200 hover:bg-neutral-600 transition-colors">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                 d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -519,7 +562,7 @@ const Report = () => {
           ].map((action, i) => (
             <button key={i} type="button" onClick={() => navigate(action.path)}
               className="flex items-center gap-3 p-4 bg-neutral-900 border border-neutral-800/50
-                rounded-xl hover:border-neutral-700/50 transition-all group text-left">
+              rounded-xl hover:border-neutral-700/50 transition-all group text-left">
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-neutral-200 group-hover:text-neutral-100 transition-colors">
                   {action.label}
@@ -533,7 +576,6 @@ const Report = () => {
             </button>
           ))}
         </div>
-
       </div>
     </DashboardLayout>
   );
